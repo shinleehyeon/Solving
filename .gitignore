@@ -1,0 +1,33 @@
+# Xcode / build
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# SwiftPM / local tool builds
+.swiftpm/
+tools/.build/
+Package.resolved
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Secrets / local
+.env
+*.pem
+*.p12
+Secrets/
+**/last-capture.png
+**/last-capture.jpg
+
+# Logs
+*.log
+Library/

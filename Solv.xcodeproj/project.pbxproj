@@ -1,0 +1,286 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		C10000000000000000000000 /* SolvApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000000 /* SolvApp.swift */; };
+		C10000000000000000000001 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* AppState.swift */; };
+		C10000000000000000000002 /* HotkeyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* HotkeyMonitor.swift */; };
+		C10000000000000000000003 /* ScreenCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* ScreenCapture.swift */; };
+		C10000000000000000000004 /* CapsLockLED.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* CapsLockLED.swift */; };
+		C10000000000000000000005 /* QuestionSolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* QuestionSolver.swift */; };
+		C10000000000000000000006 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* KeychainStore.swift */; };
+		C10000000000000000000007 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* SettingsView.swift */; };
+		A10000000000000000000011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000010 /* Assets.xcassets */; };
+		C10000000000000000000008 /* RegionSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* RegionSelector.swift */; };
+		C1000000000000000000000A /* MouseMover.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* MouseMover.swift */; };
+		C1000000000000000000000B /* SolvModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* SolvModel.swift */; };
+		C1000000000000000000000C /* VisionImageEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000C /* VisionImageEncoder.swift */; };
+		C1000000000000000000000D /* OptionOCRLocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* OptionOCRLocator.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		B10000000000000000000000 /* SolvApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SolvApp.swift; sourceTree = "<group>"; };
+		B10000000000000000000001 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		B10000000000000000000002 /* HotkeyMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyMonitor.swift; sourceTree = "<group>"; };
+		B10000000000000000000003 /* ScreenCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCapture.swift; sourceTree = "<group>"; };
+		B10000000000000000000004 /* CapsLockLED.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapsLockLED.swift; sourceTree = "<group>"; };
+		B10000000000000000000005 /* QuestionSolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestionSolver.swift; sourceTree = "<group>"; };
+		B10000000000000000000006 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		B10000000000000000000007 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A10000000000000000000010 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A10000000000000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A10000000000000000000006 /* Solv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Solv.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10000000000000000000008 /* RegionSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegionSelector.swift; sourceTree = "<group>"; };
+		B1000000000000000000000A /* MouseMover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MouseMover.swift; sourceTree = "<group>"; };
+		B1000000000000000000000B /* SolvModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SolvModel.swift; sourceTree = "<group>"; };
+		B1000000000000000000000C /* VisionImageEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionImageEncoder.swift; sourceTree = "<group>"; };
+		B1000000000000000000000D /* OptionOCRLocator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptionOCRLocator.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A10000000000000000000009 = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000007 /* Solv */,
+				A10000000000000000000008 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A10000000000000000000007 /* Solv */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000000 /* SolvApp.swift */,
+				B10000000000000000000001 /* AppState.swift */,
+				B10000000000000000000002 /* HotkeyMonitor.swift */,
+				B10000000000000000000003 /* ScreenCapture.swift */,
+				B10000000000000000000004 /* CapsLockLED.swift */,
+				B10000000000000000000005 /* QuestionSolver.swift */,
+				B10000000000000000000006 /* KeychainStore.swift */,
+				B10000000000000000000007 /* SettingsView.swift */,
+				B10000000000000000000008 /* RegionSelector.swift */,
+				B1000000000000000000000A /* MouseMover.swift */,
+				B1000000000000000000000B /* SolvModel.swift */,
+				B1000000000000000000000C /* VisionImageEncoder.swift */,
+				B1000000000000000000000D /* OptionOCRLocator.swift */,
+				A10000000000000000000010 /* Assets.xcassets */,
+				A10000000000000000000012 /* Info.plist */,
+			);
+			path = Solv;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000008 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000006 /* Solv.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000000000000000000002 /* Solv */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1000000000000000000000E /* Build configuration list for PBXNativeTarget "Solv" */;
+			buildPhases = (
+				A10000000000000000000003 /* Sources */,
+				A10000000000000000000005 /* Frameworks */,
+				A10000000000000000000004 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Solv;
+			productName = Solv;
+			productReference = A10000000000000000000006 /* Solv.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A10000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = A1000000000000000000000F /* Build configuration list for PBXProject "Solv" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = ko;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				ko,
+				Base,
+			);
+			mainGroup = A10000000000000000000009;
+			productRefGroup = A10000000000000000000008 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A10000000000000000000002 /* Solv */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000004 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000011 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10000000000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C10000000000000000000000 /* SolvApp.swift in Sources */,
+				C10000000000000000000001 /* AppState.swift in Sources */,
+				C10000000000000000000002 /* HotkeyMonitor.swift in Sources */,
+				C10000000000000000000003 /* ScreenCapture.swift in Sources */,
+				C10000000000000000000004 /* CapsLockLED.swift in Sources */,
+				C10000000000000000000005 /* QuestionSolver.swift in Sources */,
+				C10000000000000000000006 /* KeychainStore.swift in Sources */,
+				C10000000000000000000007 /* SettingsView.swift in Sources */,
+				C10000000000000000000008 /* RegionSelector.swift in Sources */,
+				C1000000000000000000000A /* MouseMover.swift in Sources */,
+				C1000000000000000000000B /* SolvModel.swift in Sources */,
+				C1000000000000000000000C /* VisionImageEncoder.swift in Sources */,
+				C1000000000000000000000D /* OptionOCRLocator.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A1000000000000000000000C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A1000000000000000000000D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		A1000000000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				CODE_SIGN_ENTITLEMENTS = Solv/Solv.entitlements;
+				DEVELOPMENT_TEAM = WN99FPJ6HV;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_DEBUG_DYLIB = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Solv/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.solv.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A1000000000000000000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				CODE_SIGN_ENTITLEMENTS = Solv/Solv.entitlements;
+				DEVELOPMENT_TEAM = WN99FPJ6HV;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_DEBUG_DYLIB = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Solv/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.solv.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A1000000000000000000000F /* Build configuration list for PBXProject "Solv" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000000000000000000000C /* Debug */,
+				A1000000000000000000000D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1000000000000000000000E /* Build configuration list for PBXNativeTarget "Solv" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000000000000000000000A /* Debug */,
+				A1000000000000000000000B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A10000000000000000000001 /* Project object */;
+}
