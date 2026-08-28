@@ -2,16 +2,18 @@ import AppKit
 import Foundation
 
 enum HotkeyAction {
-    case capsRegion          // ⌘⌥ (회색 테두리)
-    case capsRegionHidden    // ⌘⌥⌃ (테두리 없음)
+    case capsRegion          // ⌘⌥
+    case capsRegionHidden    // ⌘⌥⌃
     case capsFullScreen      // ⌘⌥C
     case mouseRegion         // ⌘⌃
-    case mouseRegionHidden   // ⌘⌥⌃Fn (테두리 없음 · 마우스)
+    case mouseRegionHidden   // ⌘⌥⌃Fn
     case mouseFullScreen     // ⌘⌃C
+    case raycastRegion       // ⌘⇧
+    case raycastRegionHidden // ⌘⇧⌥
+    case raycastFullScreen   // ⌘⇧C
 }
 
-/// ⌘⌥ = Caps 영역 / ⌘⌥⌃ = Caps 영역(선 없음) / ⌘⌥⌃Fn = 마우스 영역(선 없음)
-/// ⌘⌥C = Caps 전체 / ⌘⌃ = 마우스 영역 / ⌘⌃C = 마우스 전체
+/// ⌘⇧ = 선 있음 / ⌘⇧⌥ = 선 없음 / ⌘⇧C = 전체 (클립보드)
 final class HotkeyMonitor {
     var onAction: ((HotkeyAction) -> Void)?
 
@@ -27,12 +29,14 @@ final class HotkeyMonitor {
         case capsHidden
         case mouseHidden
         case mouse
+        case raycast
+        case raycastHidden
     }
 
     private var armed: Armed = .none
     private var consumedKey = false
-    /// deviceIndependentFlagsMask에 Fn이 빠진 기기 대비
     private var fnHeld = false
+    private var suppressChordRegionUntil: Date?
 
     func setEnabled(_ value: Bool) {
         enabled = value
@@ -40,6 +44,7 @@ final class HotkeyMonitor {
             armed = .none
             consumedKey = false
             fnHeld = false
+            suppressChordRegionUntil = nil
         }
     }
 
@@ -84,28 +89,36 @@ final class HotkeyMonitor {
         let ctrl = flags.contains(.control)
         let shift = flags.contains(.shift)
 
+        if cmd && shift && !opt && !ctrl {
+            markChordConsumed()
+            onAction?(.raycastFullScreen)
+            return true
+        }
         if cmd && opt && !ctrl && !shift {
-            consumedKey = true
+            markChordConsumed()
             onAction?(.capsFullScreen)
             return true
         }
         if cmd && ctrl && !opt && !shift {
-            consumedKey = true
+            markChordConsumed()
             onAction?(.mouseFullScreen)
             return true
         }
         return false
     }
 
+    private func markChordConsumed() {
+        armed = .none
+        consumedKey = true
+        suppressChordRegionUntil = Date().addingTimeInterval(0.6)
+    }
+
     private func updateFnHeld(from event: NSEvent) {
-        // keyCode 63 = Fn (flagsChanged)
         if event.keyCode == 63 {
             fnHeld = event.modifierFlags.contains(.function)
         } else if event.modifierFlags.contains(.function) {
             fnHeld = true
         } else if !event.modifierFlags.contains(.function) {
-            // 다른 수식어만 바뀌었는데 function 비트가 없으면 해제
-            // (단, 일부 맥은 Fn을 이 비트로만 보고함)
             fnHeld = false
         }
     }
@@ -120,13 +133,16 @@ final class HotkeyMonitor {
         let opt = flags.contains(.option)
         let ctrl = flags.contains(.control)
         let shift = flags.contains(.shift)
-        let fn = fnHeld || event.modifierFlags.contains(.function)
+        let fn = fnHeld || flags.contains(.function)
 
-        // 우선순위: ⌘⌥⌃Fn > ⌘⌥⌃ > ⌘⌥ > ⌘⌃
         let mouseHiddenCombo = cmd && opt && ctrl && fn && !shift
         let capsHiddenCombo = cmd && opt && ctrl && !fn && !shift
+        let raycastHiddenCombo = cmd && shift && opt && !ctrl
         let capsCombo = cmd && opt && !ctrl && !shift
         let mouseCombo = cmd && ctrl && !opt && !shift
+        let raycastCombo = cmd && shift && !opt && !ctrl
+
+        let suppressActive = suppressChordRegionUntil.map { Date() < $0 } ?? false
 
         if mouseHiddenCombo {
             if armed != .mouseHidden {
@@ -136,7 +152,6 @@ final class HotkeyMonitor {
             return
         }
 
-        // Fn을 떼서 ⌘⌥⌃ 만 남김 → 마우스 숨김 발화 후 재무장하지 않음
         if armed == .mouseHidden {
             let shouldFire = !consumedKey
             armed = .none
@@ -161,7 +176,34 @@ final class HotkeyMonitor {
             return
         }
 
+        if raycastHiddenCombo {
+            if suppressActive { return }
+            if armed != .raycastHidden {
+                armed = .raycastHidden
+                consumedKey = false
+            }
+            return
+        }
+
+        if armed == .raycastHidden {
+            let shouldFire = !consumedKey
+            armed = .none
+            consumedKey = false
+            if shouldFire { onAction?(.raycastRegionHidden) }
+            return
+        }
+
+        if raycastCombo {
+            if suppressActive { return }
+            if armed != .raycast {
+                armed = .raycast
+                consumedKey = false
+            }
+            return
+        }
+
         if capsCombo {
+            if suppressActive { return }
             if armed != .caps {
                 armed = .caps
                 consumedKey = false
@@ -169,6 +211,7 @@ final class HotkeyMonitor {
             return
         }
         if mouseCombo {
+            if suppressActive { return }
             if armed != .mouse {
                 armed = .mouse
                 consumedKey = false
@@ -182,12 +225,17 @@ final class HotkeyMonitor {
         consumedKey = false
 
         guard shouldFire else { return }
+        if let until = suppressChordRegionUntil, Date() < until {
+            return
+        }
         switch previous {
         case .caps:
             onAction?(.capsRegion)
         case .mouse:
             onAction?(.mouseRegion)
-        case .capsHidden, .mouseHidden, .none:
+        case .raycast:
+            onAction?(.raycastRegion)
+        case .capsHidden, .mouseHidden, .raycastHidden, .none:
             break
         }
     }

@@ -23,7 +23,7 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>화면에 보이는 5지선다 문제를 읽고 풀기 위해 화면 캡처가 필요합니다.</string>
+	<string>화면에 보이는 객관식(N지선다) 문제를 읽고 풀기 위해 화면 캡처가 필요합니다.</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>전역 단축키를 위해 필요합니다.</string>
 </dict>

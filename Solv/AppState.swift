@@ -52,6 +52,12 @@ final class AppState: ObservableObject {
                     await self?.solve(capture: .region, output: .mouse, showBorder: true)
                 case .mouseRegionHidden:
                     await self?.solve(capture: .region, output: .mouse, showBorder: false)
+                case .raycastRegion:
+                    await self?.solve(capture: .region, output: .raycast, showBorder: true)
+                case .raycastRegionHidden:
+                    await self?.solve(capture: .region, output: .raycast, showBorder: false)
+                case .raycastFullScreen:
+                    await self?.solve(capture: .fullScreen, output: .raycast)
                 }
             }
         }
@@ -177,6 +183,7 @@ final class AppState: ObservableObject {
     enum OutputMode {
         case capsLock
         case mouse
+        case raycast
     }
 
     func solve(
@@ -194,11 +201,9 @@ final class AppState: ObservableObject {
             return
         }
 
-        // 마우스 이동은 손쉬운 사용 권장. 없어도 warp는 시도하고, 실패 시 안내.
         let axOK = AXIsProcessTrusted()
-        if output == .mouse, !axOK {
-            statusText = "손쉬운 사용 OFF · 이동 시도 후 안 되면 권한 ON"
-            // 설정 자동 오픈은 하지 않음 (캡처 권한과 같이 사용자가 메뉴로)
+        if (output == .mouse || output == .raycast), !axOK {
+            statusText = "손쉬운 사용 OFF · 이동/타이핑에 필요할 수 있음"
         }
 
         let image: NSImage
@@ -232,13 +237,13 @@ final class AppState: ObservableObject {
 
         statusText = output == .mouse ? "문제 분석·위치 확인 중…" : "문제 분석 중…"
         do {
-            let result = try await solver.solveFiveChoice(
+            let result = try await solver.solve(
                 image: image,
                 apiKey: apiKey,
                 needLocation: output == .mouse
             )
             switch result {
-            case .answer(let n, let x, let y):
+            case .mcq(let n, let x, let y, let typeText):
                 switch output {
                 case .capsLock:
                     statusText = "답: \(n) · Caps Lock \(n)회"
@@ -253,9 +258,31 @@ final class AppState: ObservableObject {
                     } else {
                         statusText = String(format: "답 %d 마우스 완료 · 오차 %.0fpt", n, miss)
                     }
+                case .raycast:
+                    let outcome = RaycastTyper.putAnswerReady(typeText)
+                    switch outcome {
+                    case .ok:
+                        statusText = "답 \(typeText) 복사됨 · Raycast 연 뒤 ⌘V"
+                    case .emptyText:
+                        statusText = "타이핑할 답이 비어 있음"
+                    }
                 }
-            case .notFiveChoice:
-                statusText = "5지선다가 아님 · 무시"
+            case .open(let typeText):
+                switch output {
+                case .raycast:
+                    let outcome = RaycastTyper.putAnswerReady(typeText)
+                    switch outcome {
+                    case .ok:
+                        statusText = "주관식 복사됨 · Raycast 연 뒤 ⌘V"
+                    case .emptyText:
+                        statusText = "타이핑할 답이 비어 있음"
+                    }
+                case .capsLock, .mouse:
+                    statusText = "주관식 답: \(typeText) · Raycast 모드(⌘⇧) 사용"
+                    if output == .capsLock { await led.blinkError() }
+                }
+            case .notQuestion:
+                statusText = "풀 수 있는 문제 아님 · 무시"
                 if output == .capsLock { await led.blinkError() }
             case .unclear:
                 statusText = "답을 확신할 수 없음"
@@ -275,6 +302,17 @@ final class AppState: ObservableObject {
             openAccessibilitySettings()
         } else {
             statusText = String(format: "마우스 OK (오차 %.0fpt, AX=%@)", miss, ax ? "ON" : "OFF")
+        }
+    }
+
+    func testRaycastType() async {
+        let sample = "solv-test"
+        let outcome = RaycastTyper.putAnswerReady(sample)
+        switch outcome {
+        case .ok:
+            statusText = "테스트 복사됨(\(sample)) · Raycast 연 뒤 ⌘V"
+        case .emptyText:
+            statusText = "빈 텍스트"
         }
     }
 }

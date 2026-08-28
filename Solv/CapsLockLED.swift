@@ -5,7 +5,7 @@ import IOKit.hid
 /// Caps Lock LED로 답을 알림.
 final class CapsLockLED {
     func blink(times: Int) async {
-        let n = max(1, min(times, 5))
+        let n = max(1, min(times, QuestionSolver.maxOptions))
         await runBlink(count: n, onMs: 320, offMs: 200)
     }
 

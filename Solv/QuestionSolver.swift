@@ -2,16 +2,21 @@ import AppKit
 import Foundation
 
 enum SolveResult {
-    case answer(Int, x: Double, y: Double)
-    case notFiveChoice
+    /// 객관식: a=번호, typeText=Raycast에 칠 문자열(보통 "3")
+    case mcq(Int, x: Double, y: Double, typeText: String)
+    /// 주관식/단답: Raycast에 타이핑할 텍스트
+    case open(typeText: String)
+    case notQuestion
     case unclear
 }
 
 final class QuestionSolver {
     private(set) static var lastEncodeInfo: String = ""
+    static let maxOptions = 9
+    private(set) static var lastOptionCount: Int?
 
-    /// - Parameter needLocation: true면 마우스용 좌표까지. Caps Lock은 false 권장(정답률↑).
-    func solveFiveChoice(
+    /// 객관식·주관식 모두 처리. needLocation이면 객관식 OCR 좌표.
+    func solve(
         image: NSImage,
         apiKey: String,
         needLocation: Bool
@@ -25,56 +30,52 @@ final class QuestionSolver {
         let modelId = SolvModel.current.resolvedId(forOpenRouter: provider == .openRouter)
         let dataURL = "data:\(payload.mime);base64,\(payload.data.base64EncodedString())"
 
-        // 1) 정답만 — 좌표/레이아웃 신경 끄고 내용만
         let answerRaw = try await chat(
             modelId: modelId,
             apiKey: apiKey,
             provider: provider,
-            purpose: .answer,
             system: """
             You are a meticulous exam solver (Korean and English).
-            Your ONLY job is to pick the correct multiple-choice answer from the screenshot.
+            Solve the question in the screenshot.
 
-            Read the full stem and EVERY option carefully. Prefer reasoning over layout.
-            Options may be labeled 1-5, A-E, ①-⑤, etc. Map A→1 … E→5.
+            Two modes:
+            1) Multiple choice (2~9 options, labels 1-9 / A-I / ①-⑨ / ㄱ-ㅎ …):
+               {"mode":"mcq","a":2,"n":4,"t":"2","why":"short reason"}
+               - a = 1-based option index, n = option count, t = short text to type (usually the digit or letter)
+            2) Open / short answer (no options, fill-in, definition, calculation result, etc.):
+               {"mode":"open","t":"답 텍스트","why":"short reason"}
+               - t = the final answer only (concise; Korean or English as appropriate). No full essay.
 
-            Reply with ONLY compact JSON (no markdown, no other text):
-            {"a":2,"why":"short reason in Korean or English"}
+            If not a solvable question: {"a":"NONE"}
+            If cannot decide: {"a":"UNSURE"}
 
-            - a must be integer 1..5 when solvable
-            - If the image is NOT a clear 5-option MCQ: {"a":"NONE"}
-            - If you truly cannot decide: {"a":"UNSURE"}
-
-            Never invent coordinates. Never answer from option position alone.
+            Never invent coordinates. Prefer content over layout.
+            Do NOT reject MCQ only because option count ≠ 5.
+            Reply ONLY compact JSON, no markdown.
             """,
-            userText: "Solve the 5-choice question. JSON only: {\"a\":N,\"why\":\"...\"}",
+            userText: "Solve. JSON: mcq {\"mode\":\"mcq\",\"a\":N,\"n\":C,\"t\":\"...\"} or open {\"mode\":\"open\",\"t\":\"...\"}",
             dataURL: dataURL
         )
 
-        let parsedAnswer = Self.parseAnswerOnly(answerRaw)
-        switch parsedAnswer {
-        case .notFiveChoice: return .notFiveChoice
-        case .unclear: return .unclear
-        case .answer(let n, let fallbackX, let fallbackY):
+        let parsed = Self.parse(answerRaw)
+        switch parsed {
+        case .notQuestion, .unclear, .open:
+            return parsed
+        case .mcq(let n, let fx, let fy, let typeText):
             guard needLocation else {
-                return .answer(n, x: fallbackX, y: fallbackY)
+                return .mcq(n, x: fx, y: fy, typeText: typeText)
             }
-            // 2) 로컬 OCR로 선택지 bbox 중심 (LLM 좌표보다 정확)
-            if let hit = await OptionOCRLocator.locate(answer: n, in: image) {
+            let optionCount = Self.lastOptionCount ?? max(n, 4)
+            if let hit = await OptionOCRLocator.locate(answer: n, optionCount: optionCount, in: image) {
                 Self.lastEncodeInfo += " · \(hit.method) '\(hit.label)'"
-                return .answer(n, x: hit.x, y: hit.y)
+                return .mcq(n, x: hit.x, y: hit.y, typeText: typeText)
             }
-            return .answer(n, x: fallbackX, y: fallbackY)
+            return .mcq(n, x: fx, y: fy, typeText: typeText)
         }
     }
 
     // MARK: - networking
 
-    private enum ChatPurpose {
-        case answer
-    }
-
-    /// Gemini 2.5 Pro는 thinking 토큰이 max_tokens를 먼저 소진해 content가 비는 경우가 많음.
     private static func isThinkingHeavy(_ modelId: String) -> Bool {
         let id = modelId.lowercased()
         return id.contains("gemini") || id.contains("o1") || id.contains("o3") || id.contains("o4")
@@ -84,13 +85,12 @@ final class QuestionSolver {
         modelId: String,
         apiKey: String,
         provider: APIProvider,
-        purpose: ChatPurpose,
         system: String,
         userText: String,
         dataURL: String
     ) async throws -> String {
         let thinking = Self.isThinkingHeavy(modelId)
-        let maxTokens = thinking ? 8192 : 300
+        let maxTokens = thinking ? 8192 : 500
 
         var body: [String: Any] = [
             "model": modelId,
@@ -141,43 +141,67 @@ final class QuestionSolver {
         let content = parsed.choices.first?.message.content?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if content.isEmpty {
-            throw SolverError.api("모델 응답이 비어 있음 (thinking 토큰 한도/모델 오류). Gemini면 다시 시도하거나 다른 모델 사용.")
+            throw SolverError.api("모델 응답이 비어 있음. Gemini면 다시 시도하거나 다른 모델 사용.")
         }
         return content
     }
 
     // MARK: - parse
 
-    private static func parseAnswerOnly(_ raw: String) -> SolveResult {
+    private static func parse(_ raw: String) -> SolveResult {
+        lastOptionCount = nil
         let cleaned = stripFences(raw)
         if let obj = jsonObject(cleaned) {
             if let s = obj["a"] as? String {
                 let u = s.uppercased()
-                if u == "NONE" { return .notFiveChoice }
+                if u == "NONE" { return .notQuestion }
                 if u == "UNSURE" { return .unclear }
             }
-            if let n = parseAnswerNumber(obj["a"]), (1...5).contains(n) {
-                return .answer(n, x: 0.5, y: estimateY(for: n))
+            if let mode = (obj["mode"] as? String)?.lowercased() {
+                if mode == "open" {
+                    if let t = stringValue(obj["t"])?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
+                        return .open(typeText: t)
+                    }
+                    return .unclear
+                }
+            }
+            // open without mode but with t and no a
+            if obj["a"] == nil, let t = stringValue(obj["t"])?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
+                return .open(typeText: t)
+            }
+
+            let optionCount = clampOptionCount(parseAnswerNumber(obj["n"]))
+            if let n = parseAnswerNumber(obj["a"]) {
+                let maxA = optionCount ?? Self.maxOptions
+                if (1...maxA).contains(n) {
+                    let count = optionCount ?? max(n, 2)
+                    lastOptionCount = count
+                    let t = stringValue(obj["t"])?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let typeText = (t?.isEmpty == false) ? t! : "\(n)"
+                    return .mcq(n, x: 0.5, y: estimateY(for: n, optionCount: count), typeText: typeText)
+                }
             }
         }
         let u = cleaned.uppercased()
-        if u.contains("NONE") { return .notFiveChoice }
         if u.contains("UNSURE") { return .unclear }
-        // plain "2"
-        if let n = parseAnswerNumber(cleaned), (1...5).contains(n) {
-            return .answer(n, x: 0.5, y: estimateY(for: n))
+        if u.contains("NONE") { return .notQuestion }
+        if let n = parseAnswerNumber(cleaned), (1...Self.maxOptions).contains(n) {
+            lastOptionCount = max(n, 4)
+            return .mcq(n, x: 0.5, y: estimateY(for: n, optionCount: lastOptionCount!), typeText: "\(n)")
         }
         return .unclear
     }
 
-    private static func parseXY(_ raw: String, answer: Int) -> (Double, Double) {
-        let cleaned = stripFences(raw)
-        if let obj = jsonObject(cleaned),
-           let x = number(obj["x"]), let y = number(obj["y"]),
-           x <= 1.5, y <= 1.5 {
-            return (clamp01(x), clamp01(y))
-        }
-        return (0.5, estimateY(for: answer))
+    private static func stringValue(_ any: Any?) -> String? {
+        if let s = any as? String { return s }
+        if let i = any as? Int { return String(i) }
+        if let d = any as? Double { return String(Int(d.rounded())) }
+        return nil
+    }
+
+    private static func clampOptionCount(_ n: Int?) -> Int? {
+        guard let n, (2...Self.maxOptions).contains(n) else { return nil }
+        return n
     }
 
     private static func stripFences(_ raw: String) -> String {
@@ -189,7 +213,6 @@ final class QuestionSolver {
     private static func jsonObject(_ raw: String) -> [String: Any]? {
         guard let data = raw.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            // try extract {...}
             if let start = raw.firstIndex(of: "{"), let end = raw.lastIndex(of: "}") {
                 let sub = String(raw[start...end])
                 if let d = sub.data(using: .utf8),
@@ -209,26 +232,22 @@ final class QuestionSolver {
             let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
             if let i = Int(t) { return i }
             let map: [Character: Int] = [
-                "1": 1, "2": 2, "3": 3, "4": 4, "5": 5,
-                "A": 1, "B": 2, "C": 3, "D": 4, "E": 5
+                "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9,
+                "A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6, "G": 7, "H": 8, "I": 9
             ]
             if let c = t.uppercased().first { return map[c] }
         }
         return nil
     }
 
-    private static func estimateY(for answer: Int) -> Double {
-        [0.40, 0.48, 0.56, 0.64, 0.72][max(0, min(4, answer - 1))]
+    private static func estimateY(for answer: Int, optionCount: Int) -> Double {
+        let count = max(2, min(Self.maxOptions, optionCount))
+        let idx = max(0, min(count - 1, answer - 1))
+        let top = 0.34
+        let bottom = 0.78
+        if count == 1 { return 0.5 }
+        return top + (bottom - top) * Double(idx) / Double(count - 1)
     }
-
-    private static func number(_ any: Any?) -> Double? {
-        if let d = any as? Double { return d }
-        if let i = any as? Int { return Double(i) }
-        if let s = any as? String { return Double(s) }
-        return nil
-    }
-
-    private static func clamp01(_ v: Double) -> Double { min(1, max(0, v)) }
 
     private static func friendlyError(from data: Data, status: Int, provider: APIProvider) -> String {
         if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {

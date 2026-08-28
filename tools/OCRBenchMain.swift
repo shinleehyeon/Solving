@@ -291,7 +291,11 @@ enum OCRBench {
 
         for c in suite {
             let gt = c.options.first { $0.index == c.answer }!
-            let hit = await OptionOCRLocator.locate(answer: c.answer, in: c.image)
+            let hit = await OptionOCRLocator.locate(
+                answer: c.answer,
+                optionCount: c.options.count,
+                in: c.image
+            )
             if let hit {
                 let p = CGPoint(x: hit.x, y: hit.y)
                 let inside = gt.rect.insetBy(dx: -0.02, dy: -0.01).contains(p)

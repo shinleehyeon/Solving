@@ -27,12 +27,12 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
             Section("단축키") {
-                Text("⌘⌥ — 영역 · Caps (회색선)")
-                Text("⌘⌥⌃ — 영역 · Caps (선 없음)")
-                Text("⌘⌥⌃Fn — 영역 · 마우스 (선 없음)")
-                Text("⌘⌥C — 전체 · Caps")
-                Text("⌘⌃ — 영역 · 마우스")
-                Text("⌘⌃C — 전체 · 마우스")
+                Text("Caps  ⌘⌥ 회색선 · ⌘⌥⌃ 선없음 · ⌘⌥C 전체")
+                Text("마우스  ⌘⌃ 회색선 · ⌘⌥⌃Fn 선없음 · ⌘⌃C 전체")
+                Text("클립보드  ⌘⇧ 회색선 · ⌘⇧⌥ 선없음 · ⌘⇧C 전체")
+                Text("클립보드는 복사만 · Raycast는 직접 연 뒤 ⌘V")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("권한") {
                 Button("화면 녹화 열기") { appState.openScreenRecordingSettings() }
@@ -40,6 +40,6 @@ struct SettingsView: View {
             }
         }
         .padding()
-        .frame(width: 460, height: 400)
+        .frame(width: 460, height: 380)
     }
 }

@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import Vision
 
-/// 온디바이스 OCR로 5지선다 선택지 위치를 찾는다 (좌상단 원점 정규화 좌표).
+/// 온디바이스 OCR로 N지선다 선택지 위치를 찾는다 (좌상단 원점 정규화 좌표).
 enum OptionOCRLocator {
     struct Hit {
         let x: Double
@@ -11,18 +11,21 @@ enum OptionOCRLocator {
         let method: String
     }
 
-    /// - Returns: 이미지 좌상단 원점, 0…1 중심점. 실패 시 nil.
-    static func locate(answer: Int, in image: NSImage) async -> Hit? {
-        let n = max(1, min(5, answer))
+    /// - Parameters:
+    ///   - answer: 1-based 정답 번호
+    ///   - optionCount: 선택지 개수 (2…9)
+    static func locate(answer: Int, optionCount: Int = 5, in image: NSImage) async -> Hit? {
+        let count = max(2, min(QuestionSolver.maxOptions, optionCount))
+        let n = max(1, min(count, answer))
         guard let cg = cgImage(from: image) else { return nil }
 
         let boxes = await recognize(cgImage: cg)
         guard !boxes.isEmpty else { return nil }
 
-        if let hit = matchByMarker(answer: n, boxes: boxes) {
+        if let hit = matchByMarker(answer: n, optionCount: count, boxes: boxes) {
             return hit
         }
-        if let hit = matchByRowIndex(answer: n, boxes: boxes) {
+        if let hit = matchByRowIndex(answer: n, optionCount: count, boxes: boxes) {
             return hit
         }
         return nil
@@ -84,10 +87,10 @@ enum OptionOCRLocator {
 
     // MARK: - matching
 
-    /// 선택지 번호/기호 마커(①, 3., A 등)를 찾아 답번에 해당하는 중심점.
-    private static func matchByMarker(answer: Int, boxes: [Box]) -> Hit? {
+    /// 선택지 번호/기호 마커를 찾아 답번에 해당하는 중심점.
+    private static func matchByMarker(answer: Int, optionCount: Int, boxes: [Box]) -> Hit? {
         let markers = boxes.compactMap { box -> (Int, Box)? in
-            guard let num = parseOptionMarker(box.text) else { return nil }
+            guard let num = parseOptionMarker(box.text), (1...optionCount).contains(num) else { return nil }
             return (num, box)
         }
 
@@ -103,7 +106,6 @@ enum OptionOCRLocator {
             }
         }
 
-        // 1) 해당 번호 마커가 직접 보이면 최우선
         if let box = best[answer] {
             return hitFromBox(box, method: "ocr-marker")
         }
@@ -119,61 +121,54 @@ enum OptionOCRLocator {
             .sorted { $0.cy < $1.cy }
         let rows = clusterByY(column, tol: 0.028)
 
-        // 첫·마지막 인식 마커 사이 행 전부 포함 (④→"q" 같이 깨진 줄도 슬롯으로 유지)
         let markedIndices: [Int] = rows.indices.compactMap { idx in
-            rowNumber(rows[idx]) != nil ? idx : nil
+            rowNumber(rows[idx], optionCount: optionCount) != nil ? idx : nil
         }
         guard let firstM = markedIndices.first, let lastM = markedIndices.last else {
-            return interpolateAnswer(answer, best: best)
+            return interpolateAnswer(answer, optionCount: optionCount, best: best)
         }
 
         var slice = Array(rows[firstM...lastM])
-
-        // 마커만 필터하면 깨진 ④가 빠져 4칸이 됨 → 사이 비마커 행도 유지한 slice 사용
-        // 다만 지문이 끼면 안 되므로, 연속 선택지 대역만: 번호가 증가하는 마커 구간에 가까운 행
-        if slice.count > 5 {
-            // 너무 많으면 마커 행 + 마커 사이 gap 행만 압축
-            slice = compressToFiveSlots(slice)
+        if slice.count > optionCount {
+            slice = compressToSlots(slice, optionCount: optionCount)
         }
 
-        if let hit = assignAndPick(answer: answer, rows: slice, method: "ocr-column") {
+        if let hit = assignAndPick(answer: answer, optionCount: optionCount, rows: slice, method: "ocr-column") {
             return hit
         }
 
-        // y 보간 (예: 3과 5만 있을 때 4)
-        if let hit = interpolateAnswer(answer, best: best) {
+        if let hit = interpolateAnswer(answer, optionCount: optionCount, best: best) {
             return hit
         }
         return nil
     }
 
-    /// 행에서 선택지 번호 추출
-    private static func rowNumber(_ row: [Box]) -> Int? {
+    private static func rowNumber(_ row: [Box], optionCount: Int) -> Int? {
         let left = row.min(by: { $0.rect.minX < $1.rect.minX })
-        if let left, let n = parseOptionMarker(left.text) { return n }
+        if let left, let n = parseOptionMarker(left.text), (1...optionCount).contains(n) { return n }
         let joined = row.map(\.text).joined(separator: " ")
-        if let n = parseOptionMarker(joined) { return n }
-        // OCR이 ④를 q/@ 등으로 읽은 경우: 한 글자 잡음 + 본문
+        if let n = parseOptionMarker(joined), (1...optionCount).contains(n) { return n }
         return nil
     }
 
-    /// 5개 슬롯으로 맞추며 번호 부여 후 answer 행 선택. count≠5여도 번호로 매칭.
-    private static func assignAndPick(answer: Int, rows: [[Box]], method: String) -> Hit? {
+    private static func assignAndPick(
+        answer: Int,
+        optionCount: Int,
+        rows: [[Box]],
+        method: String
+    ) -> Hit? {
         guard !rows.isEmpty else { return nil }
 
-        var nums: [Int?] = rows.map { rowNumber($0) }
+        var nums: [Int?] = rows.map { rowNumber($0, optionCount: optionCount) }
 
-        // 이미 answer 번호가 배정된 행
         if let idx = nums.firstIndex(where: { $0 == answer }) {
             return hitFromRow(rows[idx], method: method)
         }
 
-        // 빈 칸에 빠진 번호 채우기 (위에서 아래로, 미사용 번호 오름차순)
         var used = Set(nums.compactMap { $0 })
-        var pool = (1...5).filter { !used.contains($0) }
+        var pool = (1...optionCount).filter { !used.contains($0) }
         for i in nums.indices where nums[i] == nil {
             guard !pool.isEmpty else { break }
-            // 이웃 번호 사이로 끼우기
             let lo = (0..<i).reversed().compactMap { nums[$0] }.first
             let hi = ((i + 1)..<nums.count).compactMap { nums[$0] }.first
             if let lo, let hi, hi > lo + 1 {
@@ -206,42 +201,36 @@ enum OptionOCRLocator {
             return hitFromRow(rows[idx], method: method + "-filled")
         }
 
-        // 정확히 5행이면 순번
-        if rows.count == 5 {
+        if rows.count == optionCount, (1...optionCount).contains(answer) {
             return hitFromRow(rows[answer - 1], method: method)
         }
         return nil
     }
 
-    /// 행이 6개 이상이면 마커 행과 그 사이 gap만 남겨 최대 5슬롯에 가깝게
-    private static func compressToFiveSlots(_ rows: [[Box]]) -> [[Box]] {
+    private static func compressToSlots(_ rows: [[Box]], optionCount: Int) -> [[Box]] {
         var out: [[Box]] = []
         for row in rows {
-            if rowNumber(row) != nil {
+            if rowNumber(row, optionCount: optionCount) != nil {
                 out.append(row)
-            } else if let last = out.last, rowNumber(last) != nil {
-                // 마커 직후 비마커 1개만 슬롯으로 허용
+            } else if let last = out.last, rowNumber(last, optionCount: optionCount) != nil {
                 out.append(row)
             } else if out.isEmpty {
                 continue
             }
-            // 연속 비마커는 스킵
         }
-        if out.count > 5 {
-            // 균등 샘플
-            let step = Double(out.count) / 5.0
-            return (0..<5).map { out[min(out.count - 1, Int(Double($0) * step))] }
+        if out.count > optionCount {
+            let step = Double(out.count) / Double(optionCount)
+            return (0..<optionCount).map { out[min(out.count - 1, Int(Double($0) * step))] }
         }
         return out
     }
 
-    /// 인접 마커 y로 보간
-    private static func interpolateAnswer(_ answer: Int, best: [Int: Box]) -> Hit? {
+    private static func interpolateAnswer(_ answer: Int, optionCount: Int, best: [Int: Box]) -> Hit? {
         let below = (1..<answer).reversed().compactMap { best[$0] }.first
-        let above = ((answer + 1)...5).compactMap { best[$0] }.first
+        let above = ((answer + 1)...optionCount).compactMap { best[$0] }.first
         if let below, let above {
             let loN = (1..<answer).reversed().first { best[$0] != nil }!
-            let hiN = ((answer + 1)...5).first { best[$0] != nil }!
+            let hiN = ((answer + 1)...optionCount).first { best[$0] != nil }!
             let span = Double(hiN - loN)
             let frac = Double(answer - loN) / span
             let y = below.cy + (above.cy - below.cy) * frac
@@ -249,12 +238,10 @@ enum OptionOCRLocator {
             return Hit(x: min(0.98, x), y: y, label: "~\(answer)", method: "ocr-interp")
         }
         if let below {
-            let gap = 0.08
-            return Hit(x: min(0.98, below.cx + 0.06), y: below.cy + gap, label: "~\(answer)", method: "ocr-extrapolate")
+            return Hit(x: min(0.98, below.cx + 0.06), y: below.cy + 0.08, label: "~\(answer)", method: "ocr-extrapolate")
         }
         if let above {
-            let gap = 0.08
-            return Hit(x: min(0.98, above.cx + 0.06), y: max(0.02, above.cy - gap), label: "~\(answer)", method: "ocr-extrapolate")
+            return Hit(x: min(0.98, above.cx + 0.06), y: max(0.02, above.cy - 0.08), label: "~\(answer)", method: "ocr-extrapolate")
         }
         return nil
     }
@@ -290,12 +277,11 @@ enum OptionOCRLocator {
         return rows
     }
 
-    /// 마커가 약할 때: 줄 단위로 묶어 위에서부터 N번째 선택지 후보.
-    private static func matchByRowIndex(answer: Int, boxes: [Box]) -> Hit? {
+    /// 마커가 약할 때: 줄 단위로 묶어 N번째 선택지.
+    private static func matchByRowIndex(answer: Int, optionCount: Int, boxes: [Box]) -> Hit? {
         let lines = boxes.filter { $0.rect.height < 0.08 && !$0.text.isEmpty }
         guard lines.count >= answer else { return nil }
 
-        // y로 클러스터링 (비슷한 높이 = 한 줄)
         let sorted = lines.sorted { $0.cy < $1.cy }
         var rows: [[Box]] = []
         let yTol = 0.025
@@ -307,48 +293,43 @@ enum OptionOCRLocator {
             }
         }
 
-        // 선택지처럼 보이는 행: 왼쪽에 짧은 마커/번호 또는 "1." 패턴
         let optionRows = rows.filter { row in
-            let left = row.min(by: { $0.rect.minX < $1.rect.minX })
-            guard let left else { return false }
-            if parseOptionMarker(left.text) != nil { return true }
-            let joined = row.map(\.text).joined(separator: " ")
-            return parseOptionMarker(joined) != nil || looksLikeOptionLine(joined)
+            rowNumber(row, optionCount: optionCount) != nil
+                || looksLikeOptionLine(row.map(\.text).joined(separator: " "))
         }
 
-        let targetRows = optionRows.count >= 3 ? optionRows : rows
+        let targetRows = optionRows.count >= max(2, optionCount - 1) ? optionRows : rows
+        if let hit = assignAndPick(
+            answer: answer,
+            optionCount: optionCount,
+            rows: targetRows,
+            method: "ocr-row"
+        ) {
+            return hit
+        }
         guard targetRows.count >= answer else { return nil }
-        let row = targetRows[answer - 1]
-        let minX = row.map(\.rect.minX).min() ?? 0.1
-        let maxX = row.map(\.rect.maxX).max() ?? 0.9
-        let minY = row.map(\.rect.minY).min() ?? 0.5
-        let maxY = row.map(\.rect.maxY).max() ?? 0.5
-        let cx = (minX + maxX) / 2
-        let cy = (minY + maxY) / 2
-        return Hit(x: cx, y: cy, label: row.map(\.text).joined(separator: " "), method: "ocr-row")
+        return hitFromRow(targetRows[answer - 1], method: "ocr-row")
     }
 
     private static func looksLikeOptionLine(_ s: String) -> Bool {
         let t = s.trimmingCharacters(in: .whitespaces)
         guard t.count >= 2, t.count < 120 else { return false }
-        // "1 " "2." 등으로 시작
-        if parseOptionMarker(t) != nil { return true }
-        return false
+        return parseOptionMarker(t) != nil
     }
 
-    /// "3", "3.", "3)", "(3)", "③", "C", "C." 등 → 1…5
+    /// "3", "3.", "(3)", "③", "C", "ㄱ" 등 → 1…9
     static func parseOptionMarker(_ raw: String) -> Int? {
         let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.isEmpty else { return nil }
 
         let circled: [Character: Int] = [
-            "①": 1, "②": 2, "③": 3, "④": 4, "⑤": 5,
-            "❶": 1, "❷": 2, "❸": 3, "❹": 4, "❺": 5
+            "①": 1, "②": 2, "③": 3, "④": 4, "⑤": 5, "⑥": 6, "⑦": 7, "⑧": 8, "⑨": 9,
+            "❶": 1, "❷": 2, "❸": 3, "❹": 4, "❺": 5, "❻": 6, "❼": 7, "❽": 8, "❾": 9
         ]
         if let c = s.first, let n = circled[c] { return n }
 
         let koLetters: [Character: Int] = [
-            "ㄱ": 1, "ㄴ": 2, "ㄷ": 3, "ㄹ": 4, "ㅁ": 5
+            "ㄱ": 1, "ㄴ": 2, "ㄷ": 3, "ㄹ": 4, "ㅁ": 5, "ㅂ": 6, "ㅅ": 7, "ㅇ": 8, "ㅈ": 9
         ]
         if let c = s.first, let n = koLetters[c] {
             let rest = s.dropFirst()
@@ -356,49 +337,39 @@ enum OptionOCRLocator {
             if rest.first == " " || rest.first == "." { return n }
         }
 
-        // 전각 숫자 １-５
         let fullwidth: [Character: Int] = [
-            "１": 1, "２": 2, "３": 3, "４": 4, "５": 5
+            "１": 1, "２": 2, "３": 3, "４": 4, "５": 5, "６": 6, "７": 7, "８": 8, "９": 9
         ]
         if let c = s.first, let n = fullwidth[c] {
             let rest = s.dropFirst()
             if rest.isEmpty || ".)、．:：]）】 \t-번".contains(rest.first!) { return n }
             if rest.first == " " || rest.first == "." { return n }
-            return n // "１. 서울" OCR이 붙는 경우
+            return n
         }
 
-        // 선행 기호 제거
         var t = s
         while let f = t.first, "([（【".contains(f) {
             t = String(t.dropFirst())
         }
 
         let letterMap: [Character: Int] = [
-            "A": 1, "B": 2, "C": 3, "D": 4, "E": 5,
-            "a": 1, "b": 2, "c": 3, "d": 4, "e": 5
+            "A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6, "G": 7, "H": 8, "I": 9,
+            "a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "h": 8, "i": 9
         ]
 
         if let c = t.first, let n = letterMap[c] {
             let rest = t.dropFirst()
-            if rest.isEmpty || ".)、．:：]）】 \t".contains(rest.first!) {
-                return n
-            }
-            // "C option text" — 한 글자 라벨만
+            if rest.isEmpty || ".)、．:：]）】 \t".contains(rest.first!) { return n }
             if rest.first == " " { return n }
         }
 
-        if let c = t.first, c.isNumber, let n = Int(String(c)), (1...5).contains(n) {
+        if let c = t.first, c.isNumber, let n = Int(String(c)), (1...9).contains(n) {
             let rest = t.dropFirst()
-            if rest.isEmpty || ".)、．:：]）】 \t-".contains(rest.first!) {
-                return n
-            }
-            // "3번", "3." 
+            if rest.isEmpty || ".)、．:：]）】 \t-".contains(rest.first!) { return n }
             if rest.hasPrefix("번") || rest.hasPrefix(".") { return n }
         }
 
-        // 전체가 한 자리
-        if let n = Int(t), (1...5).contains(n) { return n }
-
+        if let n = Int(t), (1...9).contains(n) { return n }
         return nil
     }
 
