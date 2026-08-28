@@ -6,8 +6,29 @@ enum SolveResult {
     case mcq(Int, x: Double, y: Double, typeText: String)
     /// 주관식/단답: Raycast에 타이핑할 텍스트
     case open(typeText: String)
+    /// 한 화면에 여러 문제 → (문제 내용, 답)
+    case multi(items: [(question: String, answer: String)])
     case notQuestion
     case unclear
+}
+
+extension SolveResult {
+    /// 클립보드: "문제내용 답" 한 줄씩 (번호 매기지 않음 — 객관식과 헷갈림 방지)
+    static func clipboardText(from items: [(question: String, answer: String)]) -> String {
+        let lines = items.compactMap { item -> String? in
+            let q = item.question
+                .replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let a = item.answer.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !a.isEmpty else { return nil }
+            if q.isEmpty { return a }
+            return "\(q) \(a)"
+        }
+        guard lines.count > 1 else {
+            return lines.first ?? ""
+        }
+        return lines.joined(separator: "\n")
+    }
 }
 
 final class QuestionSolver {
@@ -36,15 +57,20 @@ final class QuestionSolver {
             provider: provider,
             system: """
             You are a meticulous exam solver (Korean and English).
-            Solve the question in the screenshot.
+            Solve every question visible in the screenshot.
 
-            Two modes:
-            1) Multiple choice (2~9 options, labels 1-9 / A-I / ①-⑨ / ㄱ-ㅎ …):
-               {"mode":"mcq","a":2,"n":4,"t":"2","why":"short reason"}
-               - a = 1-based option index, n = option count, t = short text to type (usually the digit or letter)
-            2) Open / short answer (no options, fill-in, definition, calculation result, etc.):
-               {"mode":"open","t":"답 텍스트","why":"short reason"}
-               - t = the final answer only (concise; Korean or English as appropriate). No full essay.
+            Modes:
+            1) Single multiple choice (2~9 options):
+               {"mode":"mcq","a":2,"n":4,"t":"2","why":"short"}
+               - a = 1-based option index, n = option count, t = short text to type
+            2) Single open / short answer:
+               {"mode":"open","t":"답 텍스트","why":"short"}
+            3) TWO OR MORE questions in the image (numbered problems, several blanks, etc.):
+               {"mode":"multi","items":[{"q":"다음 중 vi 편집기를 개발한 인물로 알맞은 것은?","t":"3"},{"q":"문제 내용을 짧게","t":"답"}]}
+               - q = short question stem as shown (핵심만, 선택지 나열은 생략)
+               - t = final answer only (digit/letter for MCQ, short text for open)
+               - One item per question, top-to-bottom / left-to-right order
+               - Prefer multi whenever more than one distinct question/answer is visible
 
             If not a solvable question: {"a":"NONE"}
             If cannot decide: {"a":"UNSURE"}
@@ -53,13 +79,13 @@ final class QuestionSolver {
             Do NOT reject MCQ only because option count ≠ 5.
             Reply ONLY compact JSON, no markdown.
             """,
-            userText: "Solve. JSON: mcq {\"mode\":\"mcq\",\"a\":N,\"n\":C,\"t\":\"...\"} or open {\"mode\":\"open\",\"t\":\"...\"}",
+            userText: "Solve all. multi: {\"mode\":\"multi\",\"items\":[{\"q\":\"문제내용?\",\"t\":\"답\"},...]} or single mcq/open.",
             dataURL: dataURL
         )
 
         let parsed = Self.parse(answerRaw)
         switch parsed {
-        case .notQuestion, .unclear, .open:
+        case .notQuestion, .unclear, .open, .multi:
             return parsed
         case .mcq(let n, let fx, let fy, let typeText):
             guard needLocation else {
@@ -158,12 +184,25 @@ final class QuestionSolver {
                 if u == "UNSURE" { return .unclear }
             }
             if let mode = (obj["mode"] as? String)?.lowercased() {
+                if mode == "multi" {
+                    if let items = parseMultiItems(obj), items.count >= 2 {
+                        return .multi(items: items)
+                    }
+                    if let items = parseMultiItems(obj), items.count == 1 {
+                        return .open(typeText: items[0].answer)
+                    }
+                    return .unclear
+                }
                 if mode == "open" {
                     if let t = stringValue(obj["t"])?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
                         return .open(typeText: t)
                     }
                     return .unclear
                 }
+            }
+            // multi without mode: items array
+            if let items = parseMultiItems(obj), items.count >= 2 {
+                return .multi(items: items)
             }
             // open without mode but with t and no a
             if obj["a"] == nil, let t = stringValue(obj["t"])?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
@@ -190,6 +229,47 @@ final class QuestionSolver {
             return .mcq(n, x: 0.5, y: estimateY(for: n, optionCount: lastOptionCount!), typeText: "\(n)")
         }
         return .unclear
+    }
+
+    private static func parseMultiItems(_ obj: [String: Any]) -> [(question: String, answer: String)]? {
+        if let items = obj["items"] as? [[String: Any]] {
+            let parsed: [(question: String, answer: String)] = items.compactMap { item in
+                guard let a = stringValue(item["t"])?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty else {
+                    return nil
+                }
+                let q = (stringValue(item["q"]) ?? stringValue(item["question"]) ?? "")
+                    .replacingOccurrences(of: "\n", with: " ")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return (question: q, answer: a)
+            }
+            return parsed.isEmpty ? nil : parsed
+        }
+        if let items = obj["items"] as? [String] {
+            let parsed = items
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .map { (question: "", answer: $0) }
+            return parsed.isEmpty ? nil : parsed
+        }
+        if let arr = obj["answers"] as? [Any] {
+            let parsed: [(question: String, answer: String)] = arr.compactMap { any in
+                if let dict = any as? [String: Any] {
+                    guard let a = stringValue(dict["t"])?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty else {
+                        return nil
+                    }
+                    let q = (stringValue(dict["q"]) ?? "")
+                        .replacingOccurrences(of: "\n", with: " ")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    return (question: q, answer: a)
+                }
+                if let a = stringValue(any)?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty {
+                    return (question: "", answer: a)
+                }
+                return nil
+            }
+            return parsed.isEmpty ? nil : parsed
+        }
+        return nil
     }
 
     private static func stringValue(_ any: Any?) -> String? {

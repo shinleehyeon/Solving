@@ -281,6 +281,22 @@ final class AppState: ObservableObject {
                     statusText = "주관식 답: \(typeText) · Raycast 모드(⌘⇧) 사용"
                     if output == .capsLock { await led.blinkError() }
                 }
+            case .multi(let items):
+                let text = SolveResult.clipboardText(from: items)
+                switch output {
+                case .raycast:
+                    let outcome = RaycastTyper.putAnswerReady(text)
+                    switch outcome {
+                    case .ok:
+                        statusText = "문제 \(items.count)개 복사됨 · Raycast 연 뒤 ⌘V"
+                    case .emptyText:
+                        statusText = "타이핑할 답이 비어 있음"
+                    }
+                case .capsLock, .mouse:
+                    _ = RaycastTyper.putAnswerReady(text)
+                    statusText = "문제 \(items.count)개 · 클립보드에 복사됨 (⌘V)"
+                    if output == .capsLock { await led.blink(times: min(items.count, 9)) }
+                }
             case .notQuestion:
                 statusText = "풀 수 있는 문제 아님 · 무시"
                 if output == .capsLock { await led.blinkError() }
