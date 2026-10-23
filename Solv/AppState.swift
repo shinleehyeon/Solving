@@ -13,13 +13,13 @@ final class AppState: ObservableObject {
             hotkey.setEnabled(hotkeyEnabled)
         }
     }
-    @Published var apiKeyInput = ""
-    @Published var selectedModel: SolvModel = SolvModel.current {
-        didSet {
-            SolvModel.current = selectedModel
-            statusText = "모델: \(selectedModel.title)"
-        }
+    /// 정밀 모드: 고해상도 이미지 + 생각(reasoning) 켜기 — 느리지만 어려운 문제에 강함
+    @Published var preciseMode = true {
+        didSet { UserDefaults.standard.set(preciseMode, forKey: "preciseMode") }
     }
+    @Published var apiKeyInput = ""
+    /// 설정·메뉴에서 쓰는 선택 모델 (catalog와 동기)
+    var selectedModel: SolvRemoteModel { SolvModelCatalog.shared.selectedModel }
 
     private let hotkey = HotkeyMonitor()
     private let capture = ScreenCapture()
@@ -29,11 +29,18 @@ final class AppState: ObservableObject {
 
     init() {
         hotkeyEnabled = UserDefaults.standard.object(forKey: "hotkeyEnabled") as? Bool ?? true
+        preciseMode = UserDefaults.standard.object(forKey: "preciseMode") as? Bool ?? true
         apiKeyInput = KeychainStore.loadAPIKey() ?? ""
-        selectedModel = SolvModel.current
         Task { @MainActor in
             self.start()
+            await SolvModelCatalog.shared.refresh()
         }
+    }
+
+    func selectModel(_ model: SolvRemoteModel) {
+        SolvModelCatalog.shared.selectedId = model.id
+        statusText = "모델: \(model.shortTitle)"
+        objectWillChange.send()
     }
 
     func start() {
@@ -45,19 +52,23 @@ final class AppState: ObservableObject {
                 case .capsRegion:
                     await self?.solve(capture: .region, output: .capsLock, showBorder: true)
                 case .capsRegionHidden:
-                    await self?.solve(capture: .region, output: .capsLock, showBorder: false)
+                    await self?.solve(capture: .region, output: .handCursor, showBorder: false)
                 case .mouseFullScreen:
                     await self?.solve(capture: .fullScreen, output: .mouse)
                 case .mouseRegion:
                     await self?.solve(capture: .region, output: .mouse, showBorder: true)
                 case .mouseRegionHidden:
                     await self?.solve(capture: .region, output: .mouse, showBorder: false)
+                case .mouseCursorRegion:
+                    await self?.solve(capture: .region, output: .mouseCursor, showBorder: false)
                 case .raycastRegion:
                     await self?.solve(capture: .region, output: .raycast, showBorder: true)
                 case .raycastRegionHidden:
                     await self?.solve(capture: .region, output: .raycast, showBorder: false)
                 case .raycastFullScreen:
                     await self?.solve(capture: .fullScreen, output: .raycast)
+                case .raycastExplainHidden:
+                    await self?.solve(capture: .region, output: .raycastExplain, showBorder: false)
                 }
             }
         }
@@ -71,23 +82,60 @@ final class AppState: ObservableObject {
     }
 
     func saveAPIKey() {
-        KeychainStore.saveAPIKey(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines))
-        statusText = "API 키 저장됨 · ⌘⌥ 영역 / ⌘⌥C 전체"
+        let normalized = KeychainStore.normalizeAPIKey(apiKeyInput)
+        apiKeyInput = normalized
+        KeychainStore.saveAPIKey(normalized)
+        statusText = "API 키 저장됨 · 연결 확인 중…"
+        Task { await testAPIKey() }
     }
 
-    func promptForAPIKey() {
+    /// OpenRouter/OpenAI에 실제로 물어봐 키가 유효한지 확인
+    func testAPIKey() async {
+        guard let key = KeychainStore.loadAPIKey(), !key.isEmpty else {
+            statusText = "API 키 없음 · 메뉴에서 키 입력"
+            return
+        }
+        statusText = "API 키 확인 중… \(KeychainStore.maskedPreview(key))"
+        let result = await QuestionSolver.probeAPIKey(key)
+        if result.ok {
+            statusText = "API OK · \(result.message)"
+        } else {
+            statusText = "API 실패 · \(result.message)"
+            promptForAPIKey(preface: result.message)
+        }
+    }
+
+    func openOpenRouterKeysPage() {
+        if let url = URL(string: "https://openrouter.ai/keys") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    func promptForAPIKey(preface: String? = nil) {
         let alert = NSAlert()
         alert.messageText = "API 키"
-        alert.informativeText = "OpenAI(sk-...) 또는 OpenRouter(sk-or-v1-...) 키를 입력하세요."
-        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        var info = "Gemini/Claude는 OpenRouter 키(sk-or-v1-…)가 필요합니다.\nopenrouter.ai/keys 에서 Create Key 후 붙여넣으세요."
+        if let preface, !preface.isEmpty {
+            info = "\(preface)\n\n" + info
+        }
+        alert.informativeText = info
+        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
         field.stringValue = apiKeyInput
         alert.accessoryView = field
-        alert.addButton(withTitle: "저장")
+        alert.addButton(withTitle: "저장·연결확인")
+        alert.addButton(withTitle: "OpenRouter 키 페이지")
         alert.addButton(withTitle: "취소")
         NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn {
+        let result = alert.runModal()
+        if result == .alertFirstButtonReturn {
             apiKeyInput = field.stringValue
             saveAPIKey()
+        } else if result == .alertSecondButtonReturn {
+            openOpenRouterKeysPage()
+            // 페이지 연 뒤 다시 입력 받기
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.promptForAPIKey(preface: "새 키를 복사한 뒤 붙여넣으세요")
+            }
         }
     }
 
@@ -119,6 +167,23 @@ final class AppState: ObservableObject {
         statusText = "Caps Lock 테스트 중…"
         await led.testBlink()
         statusText = "Caps Lock 2회 끝"
+    }
+
+    /// 손바닥 1회→2회. 커서가 확실히 바뀌는지 눈으로 확인.
+    /// 마네키네코 1번 → 쉼 → 2번
+    func testManeki() async {
+        statusText = "마네키네코 테스트 · 1→2"
+        await CatAnimator.shared.waveSequence([1, 2], pauseSeconds: 2.0)
+        statusText = "마네키네코 테스트 완료"
+    }
+
+    func testHandCursor() async {
+        statusText = "손바닥 테스트 · 답1 (길게)…"
+        await MouseMover.blinkIBeam(times: 1)
+        statusText = "손바닥 1회 끝 · 이어서 답2…"
+        try? await Task.sleep(nanoseconds: 900_000_000)
+        await MouseMover.blinkIBeam(times: 2)
+        statusText = "손바닥 테스트 완료 · \(MouseMover.lastBlinkLog)"
     }
 
     func openLastCaptureImage() {
@@ -183,7 +248,13 @@ final class AppState: ObservableObject {
     enum OutputMode {
         case capsLock
         case mouse
+        /// 손바닥 커서가 N번 바뀌며 답 표시
+        case mouseCursor
+        /// 마우스 포인터(손바닥 커서)가 N번 바뀌며 답 표시
+        case handCursor
         case raycast
+        /// 클립보드에 답 + 설명
+        case raycastExplain
     }
 
     func solve(
@@ -202,9 +273,12 @@ final class AppState: ObservableObject {
         }
 
         let axOK = AXIsProcessTrusted()
-        if (output == .mouse || output == .raycast), !axOK {
+        if (output == .mouse || output == .mouseCursor || output == .handCursor || output == .raycast || output == .raycastExplain), !axOK {
             statusText = "손쉬운 사용 OFF · 이동/타이핑에 필요할 수 있음"
         }
+
+        let includeWhy = (output == .raycastExplain)
+        let needLocation = (output == .mouse)
 
         let image: NSImage
         var regionRect: CGRect?
@@ -235,67 +309,162 @@ final class AppState: ObservableObject {
             return
         }
 
-        statusText = output == .mouse ? "문제 분석·위치 확인 중…" : "문제 분석 중…"
+        statusText = needLocation ? "문제 분석·위치 확인 중…" : (includeWhy ? "문제·설명 분석 중…" : "문제 분석 중…")
+        if preciseMode { statusText += " (정밀 · 오래 걸릴 수 있음)" }
         do {
             let result = try await solver.solve(
                 image: image,
                 apiKey: apiKey,
-                needLocation: output == .mouse
+                needLocation: needLocation,
+                needExplanation: includeWhy,
+                precise: preciseMode
             )
+            let ms = QuestionSolver.lastLatencyMs
+            let msTag = ms > 0 ? " · \(ms)ms" : ""
             switch result {
-            case .mcq(let n, let x, let y, let typeText):
+            case .mcq(let answers, let x, let y, let typeText, let why, let choices):
+                let label = answers.map(String.init).joined(separator: ",")
                 switch output {
                 case .capsLock:
-                    statusText = "답: \(n) · Caps Lock \(n)회"
-                    await led.blink(times: n)
-                    statusText = "답 \(n) Caps 완료"
+                    await signalAnswerNumbers(answers, mode: .capsLock, msTag: msTag)
+                case .mouseCursor, .handCursor:
+                    await signalAnswerNumbers(answers, mode: output, msTag: msTag)
                 case .mouse:
-                    statusText = String(format: "답 %d · OCR→마우스 (%.2f, %.2f)", n, x, y)
+                    let n = answers.first ?? 0
+                    let multiTag = answers.count > 1 ? " · 복수 \(label) (첫 선지)" : ""
+                    statusText = String(format: "답 %d%@ · OCR→마우스 (%.2f, %.2f)%@", n, multiTag, x, y, msTag)
                     let miss = await MouseMover.glideToNormalized(x: x, y: y, imageRect: regionRect)
                     if miss > 40 {
-                        statusText = "답 \(n) · 커서 이동 실패 (손쉬운 사용에서 Solv ON 후 재실행)"
+                        statusText = "답 \(label) · 커서 이동 실패 (손쉬운 사용에서 Solv ON 후 재실행)"
                         NSSound.beep()
                     } else {
-                        statusText = String(format: "답 %d 마우스 완료 · 오차 %.0fpt", n, miss)
+                        statusText = String(format: "답 %@ 마우스 완료 · 오차 %.0fpt%@", label, miss, msTag)
                     }
-                case .raycast:
-                    let outcome = RaycastTyper.putAnswerReady(typeText)
-                    switch outcome {
-                    case .ok:
-                        statusText = "답 \(typeText) 복사됨 · Raycast 연 뒤 ⌘V"
-                    case .emptyText:
-                        statusText = "타이핑할 답이 비어 있음"
-                    }
-                }
-            case .open(let typeText):
-                switch output {
-                case .raycast:
-                    let outcome = RaycastTyper.putAnswerReady(typeText)
-                    switch outcome {
-                    case .ok:
-                        statusText = "주관식 복사됨 · Raycast 연 뒤 ⌘V"
-                    case .emptyText:
-                        statusText = "타이핑할 답이 비어 있음"
-                    }
-                case .capsLock, .mouse:
-                    statusText = "주관식 답: \(typeText) · Raycast 모드(⌘⇧) 사용"
-                    if output == .capsLock { await led.blinkError() }
-                }
-            case .multi(let items):
-                let text = SolveResult.clipboardText(from: items)
-                switch output {
-                case .raycast:
+                case .raycast, .raycastExplain:
+                    let text = SolveResult.clipboardAnswer(
+                        typeText,
+                        why: why,
+                        choices: choices,
+                        includeWhy: includeWhy
+                    )
                     let outcome = RaycastTyper.putAnswerReady(text)
                     switch outcome {
                     case .ok:
-                        statusText = "문제 \(items.count)개 복사됨 · Raycast 연 뒤 ⌘V"
+                        statusText = includeWhy
+                            ? "답+선지+설명 복사됨\(msTag) · ⌘V"
+                            : "답 \(typeText) 복사됨\(msTag) · ⌘V"
                     case .emptyText:
                         statusText = "타이핑할 답이 비어 있음"
                     }
-                case .capsLock, .mouse:
-                    _ = RaycastTyper.putAnswerReady(text)
-                    statusText = "문제 \(items.count)개 · 클립보드에 복사됨 (⌘V)"
-                    if output == .capsLock { await led.blink(times: min(items.count, 9)) }
+                }
+            case .open(let typeText, let why):
+                switch output {
+                case .raycast, .raycastExplain:
+                    let text = SolveResult.clipboardAnswer(typeText, why: why, includeWhy: includeWhy)
+                    let outcome = RaycastTyper.putAnswerReady(text)
+                    switch outcome {
+                    case .ok:
+                        statusText = includeWhy
+                            ? "답+선지+설명 복사됨 · Raycast 연 뒤 ⌘V"
+                            : "주관식 복사됨 · Raycast 연 뒤 ⌘V"
+                    case .emptyText:
+                        statusText = "타이핑할 답이 비어 있음"
+                    }
+                case .capsLock:
+                    let nums = SolveResult.MultiItem.parseAnswerNumbers(typeText)
+                    if nums.isEmpty {
+                        statusText = "주관식: \(typeText) · Caps 불가 · ⌘⇧ 클립보드 사용"
+                        await led.blinkError()
+                    } else {
+                        await signalAnswerNumbers(nums, mode: .capsLock, msTag: msTag)
+                    }
+                case .mouseCursor, .handCursor:
+                    let nums = SolveResult.MultiItem.parseAnswerNumbers(typeText)
+                    if nums.isEmpty {
+                        statusText = "주관식: \(typeText) · 손바닥 불가 · ⌘⇧ 클립보드 사용"
+                        NSSound.beep()
+                    } else {
+                        await signalAnswerNumbers(nums, mode: output, msTag: msTag)
+                    }
+                case .mouse:
+                    let nums = SolveResult.MultiItem.parseAnswerNumbers(typeText)
+                    if nums.isEmpty {
+                        statusText = "주관식: \(typeText) · ⌘⇧ 클립보드 사용"
+                        NSSound.beep()
+                    } else {
+                        statusText = "주관식처럼 왔지만 객관식 \(nums.map(String.init).joined(separator: ",")) · 마우스 좌표 없음 · Caps/영역 재시도"
+                        NSSound.beep()
+                    }
+                }
+            case .multi(let items):
+                let text = SolveResult.clipboardText(from: items, includeWhy: includeWhy)
+                switch output {
+                case .raycast, .raycastExplain:
+                    let outcome = RaycastTyper.putAnswerReady(text)
+                    switch outcome {
+                    case .ok:
+                        statusText = includeWhy
+                            ? "문제 \(items.count)개 답+선지+설명 복사됨 · ⌘V"
+                            : "문제 \(items.count)개 복사됨 · Raycast 연 뒤 ⌘V"
+                    case .emptyText:
+                        statusText = "타이핑할 답이 비어 있음"
+                    }
+                case .capsLock:
+                    // 문항별 번호 + 문항 안 복수선택까지 펼침 → 1깜빡→쉼→3깜빡
+                    let nums = items.flatMap(\.answerNumbers)
+                    if nums.isEmpty {
+                        let preview = items.map(\.answer).joined(separator: ", ")
+                        statusText = "여러 문제지만 번호 파싱 실패 · \(preview)"
+                        await led.blinkError()
+                    } else {
+                        await signalAnswerNumbers(nums, mode: .capsLock, msTag: msTag, itemCount: items.count)
+                    }
+                case .mouseCursor, .handCursor:
+                    let nums = items.flatMap(\.answerNumbers)
+                    if nums.isEmpty {
+                        let preview = items.map(\.answer).joined(separator: ", ")
+                        statusText = "여러 문제지만 번호 파싱 실패 · \(preview)"
+                        NSSound.beep()
+                    } else {
+                        await signalAnswerNumbers(nums, mode: output, msTag: msTag, itemCount: items.count)
+                    }
+                case .mouse:
+                    let targets = items.enumerated().compactMap { idx, item -> (Int, Double, Double, String)? in
+                        guard let x = item.x, let y = item.y else { return nil }
+                        return (idx + 1, x, y, item.answer)
+                    }
+                    if targets.isEmpty {
+                        let summary = items.compactMap(\.answerNumber).enumerated()
+                            .map { "\($0.offset + 1)→\($0.element)" }.joined(separator: " ")
+                        statusText = summary.isEmpty
+                            ? "여러 문제 · OCR 위치 없음 · Caps로 재시도"
+                            : "OCR 위치 없음 · 답 \(summary) · Caps로 재시도"
+                        NSSound.beep()
+                    } else {
+                        var worst: CGFloat = 0
+                        for (i, t) in targets.enumerated() {
+                            statusText = String(
+                                format: "마우스 %d/%d · 답 %@ (%.2f, %.2f)",
+                                t.0, items.count, t.3, t.1, t.2
+                            )
+                            let miss = await MouseMover.glideToNormalized(
+                                x: t.1,
+                                y: t.2,
+                                imageRect: regionRect,
+                                duration: 0.7
+                            )
+                            worst = max(worst, miss)
+                            if i < targets.count - 1 {
+                                try? await Task.sleep(nanoseconds: 700_000_000)
+                            }
+                        }
+                        if worst > 40 {
+                            statusText = "마우스 \(targets.count)문제 · 일부 이동 실패 (손쉬운 사용 확인)"
+                            NSSound.beep()
+                        } else {
+                            statusText = "마우스 \(targets.count)/\(items.count)문제 순회 완료\(msTag)"
+                        }
+                    }
                 }
             case .notQuestion:
                 statusText = "풀 수 있는 문제 아님 · 무시"
@@ -305,7 +474,12 @@ final class AppState: ObservableObject {
                 if output == .capsLock { await led.blinkError() }
             }
         } catch {
-            statusText = "오류: \(error.localizedDescription)"
+            let msg = error.localizedDescription
+            statusText = "오류: \(msg)"
+            let lower = msg.lowercased()
+            if lower.contains("user not found") || lower.contains("api 키 무효") || lower.contains("키 무효") {
+                promptForAPIKey(preface: msg)
+            }
         }
     }
 
@@ -329,6 +503,59 @@ final class AppState: ObservableObject {
             statusText = "테스트 복사됨(\(sample)) · Raycast 연 뒤 ⌘V"
         case .emptyText:
             statusText = "빈 텍스트"
+        }
+    }
+
+    /// 단답·복수선택·여러 문제 공통: [1,3] → 1회 깜빡 → 2초 → 3회 깜빡
+    private func signalAnswerNumbers(
+        _ nums: [Int],
+        mode: OutputMode,
+        msTag: String,
+        itemCount: Int? = nil
+    ) async {
+        guard !nums.isEmpty else { return }
+        let summary = nums.enumerated().map { "\($0.offset + 1)→\($0.element)" }.joined(separator: " ")
+        let label = nums.map(String.init).joined(separator: ",")
+        if nums.count == 1 {
+            let n = nums[0]
+            switch mode {
+            case .capsLock:
+                statusText = "답: \(n) · Caps Lock \(n)회\(msTag)"
+                await led.blink(times: n)
+                statusText = "답 \(n) Caps 완료\(msTag)"
+            case .mouseCursor:
+                statusText = "답: \(n) · 마네키네코 \(n)번\(msTag)"
+                // 손바닥 마우스 커서 방식 (잠시 주석)
+                // await MouseMover.blinkIBeam(times: n)
+                await CatAnimator.shared.wave(times: n)
+                statusText = "답 \(n) 마네키네코 완료\(msTag)"
+            case .handCursor:
+                statusText = "답: \(n) · 손바닥 \(n)회\(msTag)"
+                await MouseMover.blinkIBeam(times: n)
+                statusText = "답 \(n) 손바닥 완료\(msTag)"
+            default:
+                break
+            }
+            return
+        }
+        let kind = itemCount.map { "\($0)문제·선택 \(nums.count)개" } ?? "복수선택 \(label)"
+        switch mode {
+        case .capsLock:
+            statusText = "Caps \(kind) · \(summary) · 사이 2초\(msTag)"
+            await led.blinkSequence(nums, pauseSeconds: 2.0)
+            statusText = "Caps \(kind) 완료 · \(summary)\(msTag)"
+        case .mouseCursor:
+            statusText = "마네키네코 \(kind) · \(summary) · 사이 2초\(msTag)"
+            // 손바닥 마우스 커서 방식 (잠시 주석)
+            // await MouseMover.blinkIBeamSequence(nums, pauseSeconds: 2.0)
+            await CatAnimator.shared.waveSequence(nums, pauseSeconds: 2.0)
+            statusText = "마네키네코 \(kind) 완료 · \(summary)\(msTag)"
+        case .handCursor:
+            statusText = "손바닥 \(kind) · \(summary) · 사이 2초\(msTag)"
+            await MouseMover.blinkIBeamSequence(nums, pauseSeconds: 2.0)
+            statusText = "손바닥 \(kind) 완료 · \(summary)\(msTag)"
+        default:
+            break
         }
     }
 }

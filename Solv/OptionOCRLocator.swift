@@ -11,29 +11,136 @@ enum OptionOCRLocator {
         let method: String
     }
 
+    /// API 호출과 병렬로 OCR을 미리 돌릴 때 사용.
+    struct Prepared {
+        let boxes: [Box]
+        var isEmpty: Bool { boxes.isEmpty }
+    }
+
+    static func prepare(_ image: NSImage) async -> Prepared? {
+        guard let cg = cgImage(from: image) else { return nil }
+        let boxes = await recognize(cgImage: cg)
+        return Prepared(boxes: boxes)
+    }
+
     /// - Parameters:
     ///   - answer: 1-based 정답 번호
     ///   - optionCount: 선택지 개수 (2…9)
     static func locate(answer: Int, optionCount: Int = 5, in image: NSImage) async -> Hit? {
+        guard let prepared = await prepare(image) else { return nil }
+        return locate(answer: answer, optionCount: optionCount, prepared: prepared)
+    }
+
+    static func locate(answer: Int, optionCount: Int = 5, prepared: Prepared) -> Hit? {
         let count = max(2, min(QuestionSolver.maxOptions, optionCount))
         let n = max(1, min(count, answer))
-        guard let cg = cgImage(from: image) else { return nil }
+        guard !prepared.boxes.isEmpty else { return nil }
 
-        let boxes = await recognize(cgImage: cg)
-        guard !boxes.isEmpty else { return nil }
-
-        if let hit = matchByMarker(answer: n, optionCount: count, boxes: boxes) {
+        if let hit = matchByMarker(answer: n, optionCount: count, boxes: prepared.boxes) {
             return hit
         }
-        if let hit = matchByRowIndex(answer: n, optionCount: count, boxes: boxes) {
+        if let hit = matchByRowIndex(answer: n, optionCount: count, boxes: prepared.boxes) {
             return hit
         }
         return nil
     }
 
+    /// 여러 객관식: 화면 위→아래 문제 묶음별로 OCR 좌표.
+    static func locateMulti(answers: [Int], optionCount: Int = 5, in image: NSImage) async -> [Hit?] {
+        guard let prepared = await prepare(image) else {
+            return Array(repeating: nil, count: answers.count)
+        }
+        return locateMulti(answers: answers, optionCount: optionCount, prepared: prepared)
+    }
+
+    static func locateMulti(answers: [Int], optionCount: Int = 5, prepared: Prepared) -> [Hit?] {
+        let count = max(2, min(QuestionSolver.maxOptions, optionCount))
+        let boxes = prepared.boxes
+        guard !answers.isEmpty, !boxes.isEmpty else {
+            return Array(repeating: nil, count: answers.count)
+        }
+
+        let groups = optionGroups(optionCount: count, boxes: boxes)
+        var byNumber: [Int: [Box]] = [:]
+        for box in boxes {
+            guard let num = parseOptionMarker(box.text), (1...count).contains(num) else { continue }
+            byNumber[num, default: []].append(box)
+        }
+        for key in byNumber.keys {
+            byNumber[key]?.sort { $0.cy < $1.cy }
+        }
+
+        return answers.enumerated().map { qi, raw in
+            let answer = max(1, min(count, raw))
+            if qi < groups.count, let hit = pickInGroup(answer: answer, group: groups[qi], method: "ocr-multi-group") {
+                return hit
+            }
+            if let list = byNumber[answer], qi < list.count {
+                return hitFromBox(list[qi], method: "ocr-multi-nth")
+            }
+            if let list = byNumber[answer], let first = list.first {
+                return hitFromBox(first, method: "ocr-multi-fallback")
+            }
+            return matchByMarker(answer: answer, optionCount: count, boxes: boxes)
+                ?? matchByRowIndex(answer: answer, optionCount: count, boxes: boxes)
+        }
+    }
+
+    /// 위→아래 선택지 마커를 문제 단위 그룹으로 나눔 (1번이 다시 나오면 새 문제).
+    private static func optionGroups(optionCount: Int, boxes: [Box]) -> [[(Int, Box)]] {
+        let markers: [(Int, Box)] = boxes.compactMap { box in
+            guard let num = parseOptionMarker(box.text), (1...optionCount).contains(num) else { return nil }
+            return (num, box)
+        }.sorted { $0.1.cy < $1.1.cy }
+
+        guard !markers.isEmpty else { return [] }
+
+        var groups: [[(Int, Box)]] = []
+        var cur: [(Int, Box)] = []
+        for m in markers {
+            if cur.isEmpty {
+                cur = [m]
+                continue
+            }
+            let last = cur[cur.count - 1]
+            let gap = m.1.cy - last.1.cy
+            let hadHigher = cur.contains { $0.0 >= 2 }
+            let restart = (m.0 == 1 && hadHigher && gap > 0.035)
+                || (gap > 0.11 && m.0 <= 2 && cur.count >= max(2, optionCount - 2))
+            if restart {
+                groups.append(cur)
+                cur = [m]
+            } else {
+                cur.append(m)
+            }
+        }
+        if !cur.isEmpty { groups.append(cur) }
+        return groups
+    }
+
+    private static func pickInGroup(answer: Int, group: [(Int, Box)], method: String) -> Hit? {
+        var best: [Int: Box] = [:]
+        for (num, box) in group {
+            if let prev = best[num] {
+                if box.rect.minX < prev.rect.minX - 0.02
+                    || (abs(box.rect.minX - prev.rect.minX) < 0.05 && box.rect.width < prev.rect.width) {
+                    best[num] = box
+                }
+            } else {
+                best[num] = box
+            }
+        }
+        if let box = best[answer] {
+            return hitFromBox(box, method: method)
+        }
+        // 그룹 안 행으로 재시도
+        let rows = clusterByY(group.map(\.1), tol: 0.03)
+        return assignAndPick(answer: answer, optionCount: max(answer, best.keys.max() ?? answer), rows: rows, method: method)
+    }
+
     // MARK: - Vision OCR
 
-    private struct Box {
+    struct Box {
         let text: String
         /// 좌상단 원점 정규화 bbox
         let rect: CGRect

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Solv 연습 · 복수 선택</title>
+  <style>
+    :root {
+      --ink: #1a1f2e;
+      --muted: #5c6578;
+      --line: #e2e6ef;
+      --bg: #f7f8fb;
+      --card: #ffffff;
+      --accent: #2f6fed;
+      --ok: #1a7f4b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #dfe9ff 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #eef2ff 0%, transparent 50%),
+        var(--bg);
+      display: grid;
+      place-items: center;
+      padding: 40px 20px;
+    }
+    .sheet {
+      width: min(640px, 100%);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 36px 40px 32px;
+      box-shadow: 0 18px 50px rgba(26, 31, 46, 0.08);
+    }
+    .badge {
+      display: inline-block;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      color: var(--accent);
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .tag {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--ok);
+      background: #e8f7ef;
+      padding: 4px 10px;
+      border-radius: 999px;
+      margin-bottom: 14px;
+    }
+    h1 {
+      font-size: 22px;
+      line-height: 1.45;
+      margin: 0 0 12px;
+      font-weight: 700;
+    }
+    .stem {
+      font-size: 15px;
+      color: var(--muted);
+      margin: 0 0 24px;
+      line-height: 1.5;
+    }
+    ol {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 10px;
+    }
+    li {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 16px;
+      line-height: 1.4;
+      background: #fff;
+    }
+    li span {
+      display: inline-flex;
+      width: 28px;
+      height: 28px;
+      margin-right: 10px;
+      border-radius: 8px;
+      align-items: center;
+      justify-content: center;
+      background: #eef3ff;
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 14px;
+      vertical-align: middle;
+    }
+    .hint {
+      margin-top: 22px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      background: #eef1f7;
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+    strong.ans { color: var(--ok); }
+  </style>
+</head>
+<body>
+  <main class="sheet">
+    <div class="badge">연습 문제 · 복수 선택 (해당되는 것 모두)</div>
+    <div class="tag">정답: 1번 · 3번</div>
+    <h1>다음 중 포유류에 해당하는 것을 모두 고르시오.</h1>
+    <p class="stem">복수 정답입니다. Solv는 1회 깜빡 → 약 2초 쉼 → 3회 깜빡으로 알려줍니다.</p>
+    <ol>
+      <li><span>1</span>고래</li>
+      <li><span>2</span>상어</li>
+      <li><span>3</span>박쥐</li>
+      <li><span>4</span>참치</li>
+      <li><span>5</span>악어</li>
+    </ol>
+    <p class="hint">
+      영역으로 이 문제만 잡은 뒤 <code>⌘⌥</code>(손바닥) 또는 Caps 단축키로 풀기<br />
+      기대 신호: 손바닥/Caps <strong class="ans">1번</strong> → 2초 → <strong class="ans">3번</strong>
+    </p>
+  </main>
+</body>
+</html>

@@ -11,9 +11,37 @@ struct VisionImagePayload {
 }
 
 enum VisionImageEncoder {
-    /// 텍스트가 뭉개지지 않게 PNG 우선, 너무 크면 고품질 JPEG.
+    /// API 전송용 — 작게·JPEG로 올려 업로드/토큰 지연을 줄임.
+    /// - Parameter fast: true면 긴 변 ~1600, 품질 낮춤 (일반 풀이)
+    static func encodeForAPI(_ image: NSImage, fast: Bool = true) -> VisionImagePayload? {
+        let maxEdge: CGFloat = fast ? 1600 : 2048
+        let prepared = image.scaledToLongEdge(max: maxEdge) ?? image
+        let size = prepared.pixelSize
+        let w = max(1, Int(size.width))
+        let h = max(1, Int(size.height))
+        guard let rep = bitmapRep(from: prepared) else { return nil }
+
+        var quality: CGFloat = fast ? 0.82 : 0.90
+        var jpeg = rep.representation(using: .jpeg, properties: [.compressionFactor: quality])
+        let limit = fast ? 1_200_000 : 2_500_000
+        while let d = jpeg, d.count > limit, quality > 0.55 {
+            quality -= 0.05
+            jpeg = rep.representation(using: .jpeg, properties: [.compressionFactor: quality])
+        }
+        guard let data = jpeg else { return nil }
+        saveDebug(data, ext: "jpg")
+        return VisionImagePayload(
+            data: data,
+            mime: "image/jpeg",
+            width: w,
+            height: h,
+            bytes: data.count,
+            format: String(format: "api-jpg q=%.2f", quality)
+        )
+    }
+
+    /// 로컬 OCR/디버그용 고해상도 (기존)
     static func encode(_ image: NSImage) -> VisionImagePayload? {
-        // Vision 모델이 읽기 좋은 긴 변 상한 (과도한 다운스케일 금지)
         let prepared = image.scaledToLongEdge(max: 2880) ?? image
         let size = prepared.pixelSize
         let w = max(1, Int(size.width))
@@ -21,16 +49,13 @@ enum VisionImageEncoder {
 
         guard let rep = bitmapRep(from: prepared) else { return nil }
 
-        // 1) PNG (무손실) — 8MB 이하면 그대로 사용
         if let png = rep.representation(using: .png, properties: [:]), png.count <= 8_000_000 {
             saveDebug(png, ext: "png")
             return VisionImagePayload(data: png, mime: "image/png", width: w, height: h, bytes: png.count, format: "png")
         }
 
-        // 2) JPEG 고품질
         var quality: CGFloat = 0.97
         var jpeg = rep.representation(using: .jpeg, properties: [.compressionFactor: quality])
-        // 12MB까지 허용 (OpenRouter/Claude 여유)
         while let d = jpeg, d.count > 12_000_000, quality > 0.75 {
             quality -= 0.04
             jpeg = rep.representation(using: .jpeg, properties: [.compressionFactor: quality])

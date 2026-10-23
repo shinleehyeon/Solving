@@ -18,6 +18,11 @@
 		A10000000000000000000011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000010 /* Assets.xcassets */; };
 		C10000000000000000000008 /* RegionSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* RegionSelector.swift */; };
 		C1000000000000000000000A /* MouseMover.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* MouseMover.swift */; };
+		C1000000000000000000CA7A /* CatAnimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000CA7A /* CatAnimator.swift */; };
+		C1000000000000000000CA7B /* RunnerCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000CA7B /* RunnerCatalog.swift */; };
+		C1000000000000000000CA7C /* RunnerPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000CA7C /* RunnerPicker.swift */; };
+		C1000000000000000000CA7E /* CarouselView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000CA7E /* CarouselView.swift */; };
+		C1000000000000000000CA7D /* SystemMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000CA7D /* SystemMonitor.swift */; };
 		C1000000000000000000000E /* RaycastTyper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000E /* RaycastTyper.swift */; };
 		C1000000000000000000000B /* SolvModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* SolvModel.swift */; };
 		C1000000000000000000000C /* VisionImageEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000C /* VisionImageEncoder.swift */; };
@@ -38,6 +43,11 @@
 		A10000000000000000000006 /* Solv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Solv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10000000000000000000008 /* RegionSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegionSelector.swift; sourceTree = "<group>"; };
 		B1000000000000000000000A /* MouseMover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MouseMover.swift; sourceTree = "<group>"; };
+		B1000000000000000000CA7A /* CatAnimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatAnimator.swift; sourceTree = "<group>"; };
+		B1000000000000000000CA7B /* RunnerCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerCatalog.swift; sourceTree = "<group>"; };
+		B1000000000000000000CA7C /* RunnerPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerPicker.swift; sourceTree = "<group>"; };
+		B1000000000000000000CA7E /* CarouselView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarouselView.swift; sourceTree = "<group>"; };
+		B1000000000000000000CA7D /* SystemMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemMonitor.swift; sourceTree = "<group>"; };
 		B1000000000000000000000E /* RaycastTyper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaycastTyper.swift; sourceTree = "<group>"; };
 		B1000000000000000000000B /* SolvModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SolvModel.swift; sourceTree = "<group>"; };
 		B1000000000000000000000C /* VisionImageEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionImageEncoder.swift; sourceTree = "<group>"; };
@@ -76,6 +86,11 @@
 				B10000000000000000000007 /* SettingsView.swift */,
 				B10000000000000000000008 /* RegionSelector.swift */,
 				B1000000000000000000000A /* MouseMover.swift */,
+				B1000000000000000000CA7A /* CatAnimator.swift */,
+				B1000000000000000000CA7B /* RunnerCatalog.swift */,
+				B1000000000000000000CA7C /* RunnerPicker.swift */,
+				B1000000000000000000CA7E /* CarouselView.swift */,
+				B1000000000000000000CA7D /* SystemMonitor.swift */,
 				B1000000000000000000000E /* RaycastTyper.swift */,
 				B1000000000000000000000B /* SolvModel.swift */,
 				B1000000000000000000000C /* VisionImageEncoder.swift */,
@@ -169,6 +184,11 @@
 				C10000000000000000000007 /* SettingsView.swift in Sources */,
 				C10000000000000000000008 /* RegionSelector.swift in Sources */,
 				C1000000000000000000000A /* MouseMover.swift in Sources */,
+				C1000000000000000000CA7A /* CatAnimator.swift in Sources */,
+				C1000000000000000000CA7B /* RunnerCatalog.swift in Sources */,
+				C1000000000000000000CA7C /* RunnerPicker.swift in Sources */,
+				C1000000000000000000CA7E /* CarouselView.swift in Sources */,
+				C1000000000000000000CA7D /* SystemMonitor.swift in Sources */,
 				C1000000000000000000000E /* RaycastTyper.swift in Sources */,
 				C1000000000000000000000B /* SolvModel.swift in Sources */,
 				C1000000000000000000000C /* VisionImageEncoder.swift in Sources */,

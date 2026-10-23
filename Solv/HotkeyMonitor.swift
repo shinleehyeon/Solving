@@ -2,18 +2,20 @@ import AppKit
 import Foundation
 
 enum HotkeyAction {
-    case capsRegion          // ⌘⌥
+    case capsRegion          // (메뉴용) 예전 ⌘⌥ — 단축키는 I‑beam으로 변경
     case capsRegionHidden    // ⌘⌥⌃
     case capsFullScreen      // ⌘⌥C
-    case mouseRegion         // ⌘⌃
+    case mouseRegion         // ⌘⌃ — OCR 이동
     case mouseRegionHidden   // ⌘⌥⌃Fn
     case mouseFullScreen     // ⌘⌃C
+    case mouseCursorRegion   // ⌘⌥ — I‑beam 횟수 (선 없음) / ⌘⌃⇧ 동일
     case raycastRegion       // ⌘⇧
     case raycastRegionHidden // ⌘⇧⌥
     case raycastFullScreen   // ⌘⇧C
+    case raycastExplainHidden // ⌘⌥⌃Fn⇧ — 선 없음 · 답+설명 클립보드
 }
 
-/// ⌘⇧ = 선 있음 / ⌘⇧⌥ = 선 없음 / ⌘⇧C = 전체 (클립보드)
+/// ⌘⌥ = I‑beam 횟수(선 없음) / ⌘⌥⌃Fn⇧ = 선 없음+설명
 final class HotkeyMonitor {
     var onAction: ((HotkeyAction) -> Void)?
 
@@ -29,8 +31,10 @@ final class HotkeyMonitor {
         case capsHidden
         case mouseHidden
         case mouse
+        case mouseCursor
         case raycast
         case raycastHidden
+        case raycastExplain
     }
 
     private var armed: Armed = .none
@@ -135,14 +139,34 @@ final class HotkeyMonitor {
         let shift = flags.contains(.shift)
         let fn = fnHeld || flags.contains(.function)
 
+        // 가장 많은 modifier부터
+        let explainCombo = cmd && opt && ctrl && fn && shift
         let mouseHiddenCombo = cmd && opt && ctrl && fn && !shift
         let capsHiddenCombo = cmd && opt && ctrl && !fn && !shift
+        let mouseCursorCombo = cmd && ctrl && shift && !opt && !fn
         let raycastHiddenCombo = cmd && shift && opt && !ctrl
         let capsCombo = cmd && opt && !ctrl && !shift
         let mouseCombo = cmd && ctrl && !opt && !shift
         let raycastCombo = cmd && shift && !opt && !ctrl
 
         let suppressActive = suppressChordRegionUntil.map { Date() < $0 } ?? false
+
+        if explainCombo {
+            if suppressActive { return }
+            if armed != .raycastExplain {
+                armed = .raycastExplain
+                consumedKey = false
+            }
+            return
+        }
+
+        if armed == .raycastExplain {
+            let shouldFire = !consumedKey
+            armed = .none
+            consumedKey = false
+            if shouldFire { onAction?(.raycastExplainHidden) }
+            return
+        }
 
         if mouseHiddenCombo {
             if armed != .mouseHidden {
@@ -173,6 +197,23 @@ final class HotkeyMonitor {
             armed = .none
             consumedKey = false
             if shouldFire { onAction?(.capsRegionHidden) }
+            return
+        }
+
+        if mouseCursorCombo {
+            if suppressActive { return }
+            if armed != .mouseCursor {
+                armed = .mouseCursor
+                consumedKey = false
+            }
+            return
+        }
+
+        if armed == .mouseCursor {
+            let shouldFire = !consumedKey
+            armed = .none
+            consumedKey = false
+            if shouldFire { onAction?(.mouseCursorRegion) }
             return
         }
 
@@ -230,12 +271,13 @@ final class HotkeyMonitor {
         }
         switch previous {
         case .caps:
-            onAction?(.capsRegion)
+            // ⌘⌥ → I‑beam 횟수 (회색선 없음)
+            onAction?(.mouseCursorRegion)
         case .mouse:
             onAction?(.mouseRegion)
         case .raycast:
             onAction?(.raycastRegion)
-        case .capsHidden, .mouseHidden, .raycastHidden, .none:
+        case .capsHidden, .mouseHidden, .mouseCursor, .raycastHidden, .raycastExplain, .none:
             break
         }
     }

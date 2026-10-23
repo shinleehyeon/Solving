@@ -6,7 +6,19 @@ import IOKit.hid
 final class CapsLockLED {
     func blink(times: Int) async {
         let n = max(1, min(times, QuestionSolver.maxOptions))
-        await runBlink(count: n, onMs: 320, offMs: 200)
+        await runBlink(count: n, onMs: 220, offMs: 160)
+    }
+
+    /// 여러 문제: 각 답을 깜빡인 뒤 `pauseSeconds`만큼 긴 쉼.
+    func blinkSequence(_ answers: [Int], pauseSeconds: Double = 2.0) async {
+        let gapNs = UInt64(max(0.5, pauseSeconds) * 1_000_000_000)
+        for (i, raw) in answers.enumerated() {
+            let n = max(1, min(raw, QuestionSolver.maxOptions))
+            await blink(times: n)
+            if i < answers.count - 1 {
+                try? await Task.sleep(nanoseconds: gapNs)
+            }
+        }
     }
 
     func blinkError() async {
