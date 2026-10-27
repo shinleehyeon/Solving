@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import ServiceManagement
 import SwiftUI
 
 @main
@@ -22,6 +23,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusBar = StatusBarController(appState: appState)
+        enableLaunchAtLoginOnFirstRun()
+    }
+
+    /// 처음 실행할 때 한 번만 로그인 항목에 등록한다. 이후엔 메뉴 토글을 존중.
+    private func enableLaunchAtLoginOnFirstRun() {
+        let key = "didRegisterLaunchAtLogin"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        try? SMAppService.mainApp.register()
     }
 }
 
@@ -174,6 +184,10 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(action("단축키 사용", checked: state.hotkeyEnabled) { state.hotkeyEnabled.toggle() })
         menu.addItem(action("정밀 모드 (느리지만 정확)", checked: state.preciseMode) { state.preciseMode.toggle() })
+        menu.addItem(action("로그인 시 자동 실행", checked: SMAppService.mainApp.status == .enabled) {
+            let service = SMAppService.mainApp
+            if service.status == .enabled { try? service.unregister() } else { try? service.register() }
+        })
 
         menu.addItem(action("러너: \(cat.style.title)…") { [weak self] in self?.showRunnerPicker() })
 
